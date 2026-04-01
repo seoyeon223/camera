@@ -7,7 +7,7 @@ class AppTheme {
     scaffoldBackgroundColor: AppColors.background,
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.primary,
-      background: AppColors.background,
+      background: const Color.fromARGB(255, 240, 245, 252),
       surface: AppColors.surface,
     ),
     appBarTheme: const AppBarTheme(

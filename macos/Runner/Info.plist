@@ -28,5 +28,9 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSCameraUsageDescription</key>
+	<string>의심스러운 기기나 틈새를 촬영하여 제보하기 위해 카메라 접근 권한이 필요합니다.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>저장된 사진을 제보에 첨부하기 위해 앨범 접근 권한이 필요합니다.</string>
 </dict>
 </plist>
