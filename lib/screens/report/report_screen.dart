@@ -22,7 +22,8 @@ class _ReportScreenState extends State<ReportScreen> {
 
   // 2. 입력 컨트롤러
   final TextEditingController _detailLocationController = TextEditingController();
-  final TextEditingController _otherReasonController = TextEditingController(); 
+  // 💡 기존의 '기타' 전용 컨트롤러를 '상세 설명' 범용 컨트롤러로 변경했습니다.
+  final TextEditingController _descriptionController = TextEditingController(); 
   
   // 3. 제보 유형
   String? _selectedReportType;
@@ -35,13 +36,12 @@ class _ReportScreenState extends State<ReportScreen> {
   @override
   void dispose() {
     _detailLocationController.dispose();
-    _otherReasonController.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
 
   // 📍 사용자가 버튼을 눌렀을 때 내부 위치 수집 및 검증 진행
   Future<void> _verifyCurrentLocation() async {
-    // 상세 위치를 먼저 입력했는지 확인
     if (_detailLocationController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('상세 위치를 먼저 입력해 주세요!')));
       return;
@@ -52,7 +52,7 @@ class _ReportScreenState extends State<ReportScreen> {
       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       setState(() {
         _currentPosition = position;
-        _isLocationVerified = true; // 위치 확인 성공 
+        _isLocationVerified = true;
       });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('위치 인증이 완료되었습니다.')));
     } catch (e) {
@@ -92,36 +92,41 @@ class _ReportScreenState extends State<ReportScreen> {
     }
   }
 
-    Future<void> _submitReport() async {
-      if (_formKey.currentState!.validate()) {
-        if (!_isLocationVerified || _currentPosition == null) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('현재 위치 인증을 진행해 주세요.')));
-          return;
-        }
+  // 🚀 최종 제출 함수
+  Future<void> _submitReport() async {
+    if (_formKey.currentState!.validate()) {
+      if (!_isLocationVerified || _currentPosition == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('현재 위치 인증을 진행해 주세요.')));
+        return;
+      }
 
-        final String userUid = FirebaseAuth.instance.currentUser?.uid ?? '알_수_없음';
+      final String userUid = FirebaseAuth.instance.currentUser?.uid ?? '알_수_없음';
 
-        final reportData = {
-          'reporter_uid': userUid, // 👈 핵심! 제보자 UID를 데이터에 포함시킵니다.
-          'type': _selectedReportType,
-          'other_reason': _selectedReportType == '기타' ? _otherReasonController.text : null,
-          'location_detail': _detailLocationController.text,
-          'lat': _currentPosition?.latitude,
-          'lng': _currentPosition?.longitude,
-        };
-        
-        // 나중에 이 reportData를 Firebase Database(Firestore)로 쏘아 올리면 됩니다!
-        debugPrint('서버로 전송될 제보 데이터: $reportData');
-        await FirebaseFirestore.instance.collection('reports').add({
-           ...reportData,
-          'createdAt': FieldValue.serverTimestamp(), // 현재 시간 기록
-          'status': '검토중', // 기본 상태
-        });
-              
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('제보가 안전하게 접수되었습니다.')));
-        Navigator.pop(context);
+      final reportData = {
+        'reporter_uid': userUid, 
+        'type': _selectedReportType,
+        'description': _descriptionController.text, // 💡 상세 내용이 무조건 저장되도록 수정했습니다.
+        'location_detail': _detailLocationController.text,
+        'lat': _currentPosition?.latitude,
+        'lng': _currentPosition?.longitude,
+      };
+      
+      debugPrint('서버로 전송될 제보 데이터: $reportData');
+      await FirebaseFirestore.instance.collection('reports').add({
+         ...reportData,
+        'createdAt': FieldValue.serverTimestamp(), 
+        'status': '검토중', 
+      });
+            
+      // 💡 제출이 완료되면 현재 화면을 지우고 완료 화면으로 교체(pushReplacement)합니다.
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const ReportCompleteScreen()),
+        );
       }
     }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -134,7 +139,7 @@ class _ReportScreenState extends State<ReportScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. 상세 위치 입력 (순서 변경됨)
+              // 1. 상세 위치 입력
               const Text('1. 자세한 위치를 입력해주세요', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               TextFormField(
@@ -144,7 +149,7 @@ class _ReportScreenState extends State<ReportScreen> {
               ),
               const SizedBox(height: 25),
 
-              // 2. 위치 인증 버튼 (새로 추가된 기능)
+              // 2. 위치 인증 버튼
               const Text('2. 현장 위치 인증', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               Container(
@@ -173,25 +178,25 @@ class _ReportScreenState extends State<ReportScreen> {
               ),
               const SizedBox(height: 25),
 
-              // 3. 제보 유형 선택
-              const Text('3. 제보 내용 선택', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              // 3. 제보 유형 및 상세 상황 입력 (기능 업데이트)
+              const Text('3. 무슨 일이 있었나요?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(border: OutlineInputBorder()),
                 value: _selectedReportType,
+                hint: const Text('제보 유형을 선택해주세요'),
                 items: _reportTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
                 onChanged: (v) => setState(() => _selectedReportType = v),
                 validator: (v) => v == null ? '유형을 선택해주세요.' : null,
               ),
-              if (_selectedReportType == '기타') ...[
-                const SizedBox(height: 15),
-                TextFormField(
-                  controller: _otherReasonController,
-                  decoration: const InputDecoration(hintText: '구체적인 상황을 입력해주세요.', border: OutlineInputBorder()),
-                  maxLines: 3,
-                  validator: (v) => (_selectedReportType == '기타' && v!.isEmpty) ? '내용을 입력해주세요.' : null,
-                ),
-              ],
+              const SizedBox(height: 15),
+              // 💡 '기타' 조건문(if)을 없애고 항상 보여지도록 밖으로 꺼냈습니다.
+              TextFormField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(hintText: '어떤 상황인지 자세하게 설명해 주세요.', border: OutlineInputBorder()),
+                maxLines: 4, // 입력칸을 좀 더 넓게 만들었습니다.
+                validator: (v) => v!.isEmpty ? '상세 내용을 입력해주세요.' : null,
+              ),
               const SizedBox(height: 25),
 
               // 4. 사진 가이드 및 업로드
@@ -229,6 +234,55 @@ class _ReportScreenState extends State<ReportScreen> {
                   onPressed: _submitReport,
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                   child: const Text('제보 제출하기', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 🎉 새로 추가된 제보 완료 화면 위젯
+class ReportCompleteScreen extends StatelessWidget {
+  const ReportCompleteScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('제보 완료'), elevation: 0),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // 성공을 나타내는 체크 아이콘
+              const Icon(Icons.check_circle, color: Colors.green, size: 80),
+              const SizedBox(height: 24),
+              const Text(
+                '제보가 성공적으로 접수되었습니다!', 
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                '안전한 환경을 만드는 데 참여해 주셔서 감사합니다.\n관리자 검토 후 조치될 예정입니다.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, color: Colors.grey, height: 1.5),
+              ),
+              const SizedBox(height: 40),
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  // 확인 버튼을 누르면 이전 화면(보통 홈 화면)으로 돌아갑니다.
+                  onPressed: () => Navigator.pop(context), 
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black, 
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                  ),
+                  child: const Text('확인 (홈으로 돌아가기)', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
