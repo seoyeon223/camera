@@ -31,6 +31,8 @@ class MyApp extends StatelessWidget {
         RouteNames.adminLogin: (_) => const AdminLoginPage(),
         RouteNames.admin: (_) => const AdminScreen(),
         RouteNames.businessRegister: (_) => const BusinessRegisterScreen(),
+        RouteNames.businessRegisterSuccess: (_) => const BusinessRegisterSuccessScreen(),
+        RouteNames.reportCompleteScreen: (_) => const ReportCompleteScreen(),
       },
     );
   }

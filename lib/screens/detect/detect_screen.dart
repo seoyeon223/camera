@@ -38,6 +38,7 @@ class DetectScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            // 1. 안내 배너 영역
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -54,7 +55,7 @@ class DetectScreen extends StatelessWidget {
                   ),
                   SizedBox(height: 8),
                   Text(
-                    'Wi-Fi, 블루투스, RF 신호, 렌즈 반사 결과를 기반으로 의심 신호를 표시합니다.',
+                    'Wi-Fi, 블루투스, RF 신호 결과를 기반으로 의심 신호를 표시하며, 렌즈 반사는 확실한 점검을 위해 수동 가이드를 제공합니다.',
                     style: AppTextStyles.body,
                   ),
                 ],
@@ -62,6 +63,7 @@ class DetectScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
+            // 2. 탐지 시작 버튼
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
@@ -85,9 +87,9 @@ class DetectScreen extends StatelessWidget {
                 ),
               ),
             ),
-
             const SizedBox(height: 16),
 
+            // 3. 요약 카드 (렌즈 반사 제거, 2개만 배치)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -107,20 +109,13 @@ class DetectScreen extends StatelessWidget {
                         icon: Icons.sensors,
                       ),
                     ),
-                    Expanded(
-                      child: _SummaryItem(
-                        label: '렌즈 반사',
-                        value: '주의',
-                        icon: Icons.remove_red_eye_outlined,
-                      ),
-                    ),
                   ],
                 ),
               ),
             ),
-
             const SizedBox(height: 16),
 
+            // 4. Wi-Fi / 블루투스 탐지 결과
             InfoSectionCard(
               title: 'Wi-Fi / 블루투스 탐지 결과',
               subtitle: '의심 키워드와 패턴을 기반으로 분류한 더미 결과입니다.',
@@ -139,9 +134,9 @@ class DetectScreen extends StatelessWidget {
                 }).toList(),
               ),
             ),
-
             const SizedBox(height: 16),
 
+            // 5. 하드웨어 탐지 결과 (렌즈 반사 항목 제거)
             InfoSectionCard(
               title: '하드웨어 탐지 결과',
               subtitle: '외부 장비 연동 전, 발표용 더미 상태 화면입니다.',
@@ -154,19 +149,43 @@ class DetectScreen extends StatelessWidget {
                     description: '특정 구역에서 비정상적인 무선 반응이 1회 감지되었습니다.',
                     risk: RiskLevel.high,
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // 6. [신규 추가] 렌즈 반사 수동 확인 가이드
+            InfoSectionCard(
+              title: '렌즈 반사 수동 확인 가이드',
+              subtitle: '앱 탐지 대신, 카메라 플래시를 이용해 가장 확실하게 렌즈를 찾아보세요.',
+              icon: Icons.highlight, // 플래시 아이콘
+              child: Column(
+                children: const [
+                  _ManualStepItem(
+                    step: '1',
+                    text: '방의 조명을 모두 끄고 최대한 어둡게 만드세요.',
+                  ),
                   SizedBox(height: 12),
-                  _HardwareResultCard(
-                    title: '렌즈 반사 탐지',
-                    status: '주의 필요',
-                    description: '반사 패턴이 포착되었으나 추가 확인이 필요합니다.',
-                    risk: RiskLevel.medium,
+                  _ManualStepItem(
+                    step: '2',
+                    text: '스마트폰 카메라 앱을 켜고 비디오 모드에서 플래시를 항상 켜짐 상태로 둡니다.',
+                  ),
+                  SizedBox(height: 12),
+                  _ManualStepItem(
+                    step: '3',
+                    text: '의심되는 곳(환풍구, 화재경보기, 셋톱박스 등)을 카메라 화면으로 천천히 비춰보세요.',
+                  ),
+                  SizedBox(height: 12),
+                  _ManualStepItem(
+                    step: '4',
+                    text: '화면에 작고 하얗게 반짝이는 빛(렌즈 반사광)이 보인다면 불법 촬영 기기일 수 있습니다.',
                   ),
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
 
+            // 7. 하단 주의사항 안내
             Card(
               color: AppColors.surface,
               child: Padding(
@@ -189,12 +208,15 @@ class DetectScreen extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
 }
+
+// 위젯 헬퍼 클래스들
 
 class _SummaryItem extends StatelessWidget {
   final String label;
@@ -328,6 +350,52 @@ class _HardwareResultCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// 📖 [신규 추가] 매뉴얼 스텝을 예쁘게 보여주는 위젯
+class _ManualStepItem extends StatelessWidget {
+  final String step;
+  final String text;
+
+  const _ManualStepItem({required this.step, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 원형 숫자 뱃지
+        Container(
+          width: 24,
+          height: 24,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            step,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        // 설명 텍스트
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 2.0),
+            child: Text(
+              text,
+              style: AppTextStyles.body.copyWith(height: 1.4),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

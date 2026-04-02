@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart'; // 🚀 Storage 패키지 추가됨
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -22,7 +23,6 @@ class _ReportScreenState extends State<ReportScreen> {
 
   // 2. 입력 컨트롤러
   final TextEditingController _detailLocationController = TextEditingController();
-  // 💡 기존의 '기타' 전용 컨트롤러를 '상세 설명' 범용 컨트롤러로 변경했습니다.
   final TextEditingController _descriptionController = TextEditingController(); 
   
   // 3. 제보 유형
@@ -32,6 +32,9 @@ class _ReportScreenState extends State<ReportScreen> {
   // 4. 사진 관련
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
+
+  // 5. 제출 로딩 상태 (사진 업로드 시 대기 화면용)
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -92,7 +95,7 @@ class _ReportScreenState extends State<ReportScreen> {
     }
   }
 
-  // 🚀 최종 제출 함수
+  // 🚀 최종 제출 함수 (Firebase Storage 이미지 업로드 포함)
   Future<void> _submitReport() async {
     if (_formKey.currentState!.validate()) {
       if (!_isLocationVerified || _currentPosition == null) {
@@ -100,30 +103,60 @@ class _ReportScreenState extends State<ReportScreen> {
         return;
       }
 
-      final String userUid = FirebaseAuth.instance.currentUser?.uid ?? '알_수_없음';
+      setState(() { _isSubmitting = true; }); // 제출 중 상태 켜기
 
-      final reportData = {
-        'reporter_uid': userUid, 
-        'type': _selectedReportType,
-        'description': _descriptionController.text, // 💡 상세 내용이 무조건 저장되도록 수정했습니다.
-        'location_detail': _detailLocationController.text,
-        'lat': _currentPosition?.latitude,
-        'lng': _currentPosition?.longitude,
-      };
-      
-      debugPrint('서버로 전송될 제보 데이터: $reportData');
-      await FirebaseFirestore.instance.collection('reports').add({
-         ...reportData,
-        'createdAt': FieldValue.serverTimestamp(), 
-        'status': '검토중', 
-      });
-            
-      // 💡 제출이 완료되면 현재 화면을 지우고 완료 화면으로 교체(pushReplacement)합니다.
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const ReportCompleteScreen()),
-        );
+      try {
+        final String userUid = FirebaseAuth.instance.currentUser?.uid ?? '알_수_없음';
+        String? imageUrl; // 업로드된 사진 URL을 담을 변수
+
+        // 📸 사진이 있다면 Firebase Storage에 업로드
+        if (_imageFile != null) {
+          // 파일명 생성: 현재 시간 + 유저ID (중복 방지)
+          final String fileName = '${DateTime.now().millisecondsSinceEpoch}_$userUid.jpg';
+          final Reference storageRef = FirebaseStorage.instance.ref().child('reports/$fileName');
+          
+          // 사진 업로드 진행
+          final UploadTask uploadTask = storageRef.putFile(_imageFile!);
+          final TaskSnapshot snapshot = await uploadTask;
+          
+          // 업로드 완료 후 다운로드 URL 가져오기
+          imageUrl = await snapshot.ref.getDownloadURL();
+        }
+
+        // 📝 Firestore에 저장할 데이터 구성
+        final reportData = {
+          'reporter_uid': userUid, 
+          'type': _selectedReportType,
+          'description': _descriptionController.text, 
+          'location_detail': _detailLocationController.text,
+          'lat': _currentPosition?.latitude,
+          'lng': _currentPosition?.longitude,
+          if (imageUrl != null) 'imageUrl': imageUrl, // 사진이 업로드되었다면 URL 추가
+        };
+        
+        debugPrint('서버로 전송될 제보 데이터: $reportData');
+        
+        // Firestore 'reports' 컬렉션에 데이터 저장
+        await FirebaseFirestore.instance.collection('reports').add({
+           ...reportData,
+          'createdAt': FieldValue.serverTimestamp(), 
+          'status': '대기중', // 관리자 페이지 기준에 맞게 '대기중'으로 변경
+        });
+              
+        // 💡 제출이 완료되면 현재 화면을 지우고 완료 화면으로 교체합니다.
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const ReportCompleteScreen()),
+          );
+        }
+      } catch (e) {
+        debugPrint('제보 제출 에러: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('오류가 발생했습니다. 다시 시도해주세요.')));
+        }
+      } finally {
+        if (mounted) setState(() { _isSubmitting = false; }); // 제출 중 상태 끄기
       }
     }
   }
@@ -178,7 +211,7 @@ class _ReportScreenState extends State<ReportScreen> {
               ),
               const SizedBox(height: 25),
 
-              // 3. 제보 유형 및 상세 상황 입력 (기능 업데이트)
+              // 3. 제보 유형 및 상세 상황 입력
               const Text('3. 무슨 일이 있었나요?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
@@ -190,11 +223,10 @@ class _ReportScreenState extends State<ReportScreen> {
                 validator: (v) => v == null ? '유형을 선택해주세요.' : null,
               ),
               const SizedBox(height: 15),
-              // 💡 '기타' 조건문(if)을 없애고 항상 보여지도록 밖으로 꺼냈습니다.
               TextFormField(
                 controller: _descriptionController,
                 decoration: const InputDecoration(hintText: '어떤 상황인지 자세하게 설명해 주세요.', border: OutlineInputBorder()),
-                maxLines: 4, // 입력칸을 좀 더 넓게 만들었습니다.
+                maxLines: 4, 
                 validator: (v) => v!.isEmpty ? '상세 내용을 입력해주세요.' : null,
               ),
               const SizedBox(height: 25),
@@ -213,7 +245,22 @@ class _ReportScreenState extends State<ReportScreen> {
                     border: Border.all(color: Colors.grey[300]!),
                   ),
                   child: _imageFile != null
-                    ? ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(_imageFile!, fit: BoxFit.cover))
+                    ? Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(_imageFile!, fit: BoxFit.cover)),
+                          Positioned(
+                            right: 8, top: 8,
+                            child: CircleAvatar(
+                              backgroundColor: Colors.black54,
+                              child: IconButton(
+                                icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                                onPressed: () => setState(() => _imageFile = null), // 사진 삭제 버튼
+                              ),
+                            ),
+                          )
+                        ],
+                      )
                     : const Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -231,9 +278,11 @@ class _ReportScreenState extends State<ReportScreen> {
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
-                  onPressed: _submitReport,
+                  onPressed: _isSubmitting ? null : _submitReport,
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: const Text('제보 제출하기', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: _isSubmitting 
+                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('제보 제출하기', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -244,7 +293,7 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 }
 
-// 🎉 새로 추가된 제보 완료 화면 위젯
+// 🎉 문구가 수정된 제보 완료 화면 위젯
 class ReportCompleteScreen extends StatelessWidget {
   const ReportCompleteScreen({super.key});
 
@@ -258,25 +307,19 @@ class ReportCompleteScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // 성공을 나타내는 체크 아이콘
-              const Icon(Icons.check_circle, color: Colors.green, size: 80),
+              const Icon(Icons.favorite, color: Colors.redAccent, size: 80), // 감동적인 느낌을 위해 하트 아이콘으로 변경해봤어요!
               const SizedBox(height: 24),
+              // 🚀 요청하신 멋진 문구로 변경 완료!
               const Text(
-                '제보가 성공적으로 접수되었습니다!', 
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                '안전한 환경을 만드는 데 참여해 주셔서 감사합니다.\n관리자 검토 후 조치될 예정입니다.',
+                '제출이 완료되었습니다.\n몰래카메라 없는 사회를 위해 노력해주셔서 감사합니다.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 15, color: Colors.grey, height: 1.5),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, height: 1.5),
               ),
               const SizedBox(height: 40),
               SizedBox(
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
-                  // 확인 버튼을 누르면 이전 화면(보통 홈 화면)으로 돌아갑니다.
                   onPressed: () => Navigator.pop(context), 
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black, 

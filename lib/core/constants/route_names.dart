@@ -1,3 +1,4 @@
+
 class RouteNames {
   static const home = '/';
   static const detect = '/detect';
@@ -10,4 +11,7 @@ class RouteNames {
 
   static const adminLogin = '/admin-login';
   static const admin = '/admin';
+  static const businessRegisterSuccess = '/businessRegisterSuccess';
+  static const reportCompleteScreen = '/ReportComleteScreen';
+
 }

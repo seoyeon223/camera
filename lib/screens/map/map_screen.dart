@@ -139,7 +139,7 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('지도 및 위치'),
+        title: const Text('안전화장실 지도'),
       ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator()) 
