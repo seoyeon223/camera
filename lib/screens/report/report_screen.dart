@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart'; // 🚀 Storage 패키지 추가됨
+import 'dart:async';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -97,82 +98,115 @@ class _ReportScreenState extends State<ReportScreen> {
 
   // 🚀 최종 제출 함수 (Firebase Storage 이미지 업로드 포함)
   Future<void> _submitReport() async {
-    if (_formKey.currentState!.validate()) {
-      if (!_isLocationVerified || _currentPosition == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('현재 위치 인증을 진행해 주세요.')));
-        return;
-      }
+  if (_isSubmitting) return; // 중복 제출 방지
 
-      setState(() { _isSubmitting = true; }); // 제출 중 상태 켜기
+  final isValid = _formKey.currentState?.validate() ?? false;
+  if (!isValid) return;
 
-      bool isSuccess = false; // 👈 추가: 데이터 전송 성공 여부를 명확히 추적하는 변수
+  if (!_isLocationVerified || _currentPosition == null) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('현재 위치 인증을 진행해 주세요.')),
+    );
+    return;
+  }
 
-      try {
-        final String userUid = FirebaseAuth.instance.currentUser?.uid ?? '알_수_없음';
-        String? imageUrl; // 업로드된 사진 URL을 담을 변수
+  FocusScope.of(context).unfocus(); // 키보드 내리기
 
-        // // 📸 사진이 있다면 Firebase Storage에 업로드 (기존 코드 유지)
-        // if (_imageFile != null) {
-        //   // 파일명 생성: 현재 시간 + 유저ID (중복 방지)
-        //   final String fileName = '${DateTime.now().millisecondsSinceEpoch}_$userUid.jpg';
-        //   final Reference storageRef = FirebaseStorage.instance.ref().child('reports/$fileName');
-          
-        //   // 사진 업로드 진행
-        //   final UploadTask uploadTask = storageRef.putFile(_imageFile!);
-        //   final TaskSnapshot snapshot = await uploadTask;
-          
-        //   // 업로드 완료 후 다운로드 URL 가져오기
-        //   imageUrl = await snapshot.ref.getDownloadURL();
-        // }
+  setState(() {
+    _isSubmitting = true;
+  });
 
-        // 📝 Firestore에 저장할 데이터 구성
-        final reportData = {
-          'reporter_uid': userUid, 
-          'type': _selectedReportType,
-          'description': _descriptionController.text, 
-          'location_detail': _detailLocationController.text,
-          'lat': _currentPosition?.latitude,
-          'lng': _currentPosition?.longitude,
-          if (imageUrl != null) 'imageUrl': imageUrl, // 사진이 업로드되었다면 URL 추가
-        };
-        
-        debugPrint('서버로 전송될 제보 데이터: $reportData');
-        
-        // Firestore 'reports' 컬렉션에 데이터 저장
-        // 👈 수정: 네트워크 지연 대비 Timeout(15초) 추가
-        await FirebaseFirestore.instance.collection('reports').add({
-           ...reportData,
-          'createdAt': FieldValue.serverTimestamp(), 
-          'status': '대기중', // 관리자 페이지 기준에 맞게 '대기중'으로 변경
-        }).timeout(const Duration(seconds: 15)); 
-        
-        // 여기까지 에러 없이 도달했다면 제출 성공으로 간주합니다.
-        isSuccess = true; 
+  try {
+    final String userUid =
+        FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
 
-      } catch (e) {
-        debugPrint('제보 제출 에러: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('데이터 전송 중 오류가 발생했습니다. 네트워크를 확인하고 다시 시도해주세요.'))
-          );
-        }
-      } finally {
-        // 👈 수정: 성공/실패 여부에 따라 상태 업데이트와 화면 이동을 명확히 분리
-        if (mounted) {
-          if (isSuccess) {
-            // 💡 성공 시: 로딩 상태를 강제로 끄지 않고(setState 미호출) 바로 화면을 교체합니다.
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const ReportCompleteScreen()),
-            );
-          } else {
-            // ❌ 실패 시: 사용자가 재시도할 수 있도록 로딩 상태를 해제하고 버튼을 활성화합니다.
-            setState(() { _isSubmitting = false; }); 
-          }
-        }
-      }
+    String? imageUrl;
+
+    // 사진 업로드를 다시 사용할 경우
+    if (_imageFile != null) {
+      final String fileName =
+          '${DateTime.now().millisecondsSinceEpoch}_$userUid.jpg';
+
+      final Reference storageRef =
+          FirebaseStorage.instance.ref().child('reports/$fileName');
+
+      final TaskSnapshot snapshot = await storageRef
+          .putFile(_imageFile!)
+          .timeout(const Duration(seconds: 20));
+
+      imageUrl = await snapshot.ref
+          .getDownloadURL()
+          .timeout(const Duration(seconds: 10));
+    }
+
+    final Map<String, dynamic> reportData = {
+      'reporter_uid': userUid,
+      'type': _selectedReportType,
+      'description': _descriptionController.text.trim(),
+      'location_detail': _detailLocationController.text.trim(),
+      'lat': _currentPosition!.latitude,
+      'lng': _currentPosition!.longitude,
+      'createdAt': FieldValue.serverTimestamp(),
+      'status': '대기중',
+      if (imageUrl != null) 'imageUrl': imageUrl,
+    };
+
+    debugPrint('서버로 전송될 제보 데이터: $reportData');
+
+    final docRef = await FirebaseFirestore.instance
+        .collection('reports')
+        .add(reportData)
+        .timeout(const Duration(seconds: 15));
+
+    debugPrint('제보 저장 성공: ${docRef.id}');
+
+    if (!mounted) return;
+
+    // 기존 화면을 완료 화면으로 교체
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => const ReportCompleteScreen(),
+      ),
+    );
+  } on TimeoutException {
+    debugPrint('제보 제출 타임아웃');
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('서버 응답이 지연되고 있습니다. 네트워크를 확인한 뒤 다시 시도해주세요.'),
+      ),
+    );
+  } on FirebaseException catch (e) {
+    debugPrint('Firebase 제보 제출 에러: ${e.code} / ${e.message}');
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '제보 제출에 실패했습니다. ${e.message ?? '잠시 후 다시 시도해주세요.'}',
+        ),
+      ),
+    );
+  } catch (e, st) {
+    debugPrint('제보 제출 에러: $e');
+    debugPrintStack(stackTrace: st);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('데이터 전송 중 오류가 발생했습니다: $e'),
+      ),
+    );
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isSubmitting = false;
+      });
     }
   }
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -332,12 +366,23 @@ class ReportCompleteScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context), 
+                  onPressed: () {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black, 
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                    backgroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  child: const Text('확인 (홈으로 돌아가기)', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    '확인 (홈으로 돌아가기)',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
             ],

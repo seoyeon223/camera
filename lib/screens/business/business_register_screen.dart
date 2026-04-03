@@ -116,100 +116,108 @@ class _BusinessRegisterScreenState extends State<BusinessRegisterScreen> {
     });
   }
 
-  // 🚀 최종 제출 함수 (수정됨: Storage 업로드 로직 추가)
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+  if (!_formKey.currentState!.validate()) return;
 
-    if (!_isLocationVerified) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('현장 위치 인증을 진행해 주세요.')));
-      return;
-    }
+  if (!_isLocationVerified) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('현장 위치 인증을 진행해 주세요.')),
+    );
+    return;
+  }
 
-    // if (_photos.isEmpty) {
-    //   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('안전 시설 사진을 최소 1장 이상 첨부해 주세요.')));
-    //   return;
+  setState(() {
+    _isSubmitting = true;
+  });
+
+  try {
+    final String userUid =
+        FirebaseAuth.instance.currentUser?.uid ?? '알_수_없음';
+
+    // // 1. Firebase Storage에 사진 업로드 및 URL 획득
+    // List<String> uploadedPhotoUrls = [];
+    //
+    // for (int i = 0; i < _photos.length; i++) {
+    //   File photo = _photos[i];
+    //
+    //   String fileName =
+    //       'business_photos/${userUid}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+    //   Reference storageRef = FirebaseStorage.instance.ref().child(fileName);
+    //
+    //   UploadTask uploadTask = storageRef.putFile(photo);
+    //   TaskSnapshot snapshot = await uploadTask;
+    //
+    //   String downloadUrl = await snapshot.ref.getDownloadURL();
+    //   uploadedPhotoUrls.add(downloadUrl);
     // }
 
-    bool isSuccess = false;
+    final businessData = {
+      'uploader_uid': userUid,
+      'store_name': _storeNameController.text.trim(),
+      'store_type': _storeType,
+      'owner_name': _ownerNameController.text.trim(),
+      'phone': _phoneController.text.trim(),
+      'address': _addressController.text.trim(),
+      'detail_location': _detailLocationController.text.trim(),
+      'lat': _currentPosition?.latitude,
+      'lng': _currentPosition?.longitude,
+      'has_cctv': _hasCctv,
+      'has_recent_inspection': _hasRecentInspection,
+      'has_separated_stalls': _hasSeparatedStalls,
+      'has_emergency_bell': _hasEmergencyBell,
+      'memo': _memoController.text.trim(),
+      // 'photo_urls': uploadedPhotoUrls,
+      'createdAt': FieldValue.serverTimestamp(),
+      'status': '심사중',
+    };
 
-    try {
-      final String userUid = FirebaseAuth.instance.currentUser?.uid ?? '알_수_없음';
-      
-      // // 1. Firebase Storage에 사진 업로드 및 URL 획득
-      // List<String> uploadedPhotoUrls = [];
-      
-      // for (int i = 0; i < _photos.length; i++) {
-      //   File photo = _photos[i];
-        
-      //   // 고유한 파일명 생성 (UID + 현재시간 + 인덱스)
-      //   String fileName = 'business_photos/${userUid}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
-      //   Reference storageRef = FirebaseStorage.instance.ref().child(fileName);
-        
-      //   // 파일 업로드 대기
-      //   UploadTask uploadTask = storageRef.putFile(photo);
-      //   TaskSnapshot snapshot = await uploadTask;
-        
-      //   // 업로드된 파일의 다운로드 URL 가져오기
-      //   String downloadUrl = await snapshot.ref.getDownloadURL();
-      //   uploadedPhotoUrls.add(downloadUrl);
-      // }
+    debugPrint('업소 등록 데이터: $businessData');
 
-      // 2. 등록 데이터 묶기 (URL 리스트 포함)
-      final businessData = {
-        'uploader_uid': userUid,
-        'store_name': _storeNameController.text,
-        'store_type': _storeType,
-        'owner_name': _ownerNameController.text,
-        'phone': _phoneController.text,
-        'address': _addressController.text,
-        'detail_location': _detailLocationController.text,
-        'lat': _currentPosition?.latitude,
-        'lng': _currentPosition?.longitude,
-        'has_cctv': _hasCctv,
-        'has_recent_inspection': _hasRecentInspection,
-        'has_separated_stalls': _hasSeparatedStalls,
-        'has_emergency_bell': _hasEmergencyBell,
-        'memo': _memoController.text,
-        //'photo_urls': uploadedPhotoUrls, // 👈 관리자 페이지에서 렌더링할 URL 리스트
-        'createdAt': FieldValue.serverTimestamp(),
-        'status': '심사중',
-      };
+    // timeout 제거
+    await FirebaseFirestore.instance
+        .collection('businesses')
+        .add(businessData);
 
-      // 3. Firestore에 데이터 저장
-      await FirebaseFirestore.instance
-          .collection('businesses')
-          .add(businessData)
-          .timeout(const Duration(seconds: 15)); 
+    if (!mounted) return;
 
-      // 에러 없이 여기까지 도달했다면 성공으로 간주합니다.
-      isSuccess = true;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const BusinessRegisterSuccessScreen(),
+      ),
+    );
+  } on FirebaseException catch (e) {
+    debugPrint('Firebase 제출 오류: ${e.code} / ${e.message}');
 
-      // 4. 성공 화면으로 이동 (현재 화면을 성공 화면으로 교체)
-      } catch (e) {
-      debugPrint('제출 중 오류 발생: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('데이터 전송 중 오류가 발생했습니다. 네트워크 상태를 확인해주세요.')),
-        );
-      }
-    } finally {
-      // 화면 이동 및 상태 관리 로직
-      if (mounted) {
-        if (isSuccess) {
-          // ✅ 성공 시: 로딩 상태를 강제로 끄지 않고 화면을 덮어씌웁니다. 
-          // (화면 전환 중 로딩 인디케이터가 깜빡거리며 사라지는 것을 방지하여 UI가 훨씬 자연스럽습니다.)
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const BusinessRegisterSuccessScreen()),
-          );
-        } else {
-          // ❌ 실패 시: 사용자가 다시 시도할 수 있도록 로딩 상태를 해제하여 버튼을 활성화합니다.
-          setState(() { _isSubmitting = false; });
-        }
-      }
-      
-    } 
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '등록에 실패했습니다. ${e.message ?? '잠시 후 다시 시도해주세요.'}',
+        ),
+      ),
+    );
+
+    setState(() {
+      _isSubmitting = false;
+    });
+  } catch (e) {
+    debugPrint('제출 중 오류 발생: $e');
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('데이터 전송 중 오류가 발생했습니다. 네트워크 상태를 확인해주세요.'),
+      ),
+    );
+
+    setState(() {
+      _isSubmitting = false;
+    });
   }
+}
 
   @override
   Widget build(BuildContext context) {
