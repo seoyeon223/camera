@@ -102,11 +102,15 @@ class HomeScreen extends StatelessWidget {
                           size: 24,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          '안심하고 이용할 수 있는 공간 찾기',
-                          style: AppTextStyles.title,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown, // 👈 공간이 부족할 때만 비율에 맞춰 크기를 줄임
+                          alignment: Alignment.centerLeft, // 👈 텍스트가 작아지더라도 왼쪽 정렬 유지
+                          child: Text(
+                            '안심하고 이용할 수 있는 공간 찾기',
+                            style: AppTextStyles.title,
+                          ),
                         ),
                       ),
                     ],

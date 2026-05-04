@@ -247,7 +247,10 @@ class _ReportScreenState extends State<ReportScreen> {
                     if (!_isLocationVerified)
                       ElevatedButton(
                         onPressed: _isLoadingLocation ? null : _verifyCurrentLocation,
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color.fromARGB(255, 101, 142, 213),
+                          padding: const EdgeInsets.symmetric(horizontal: 7), // 👈 버튼 좌우 여백을 줄여 크기 축소
+                          minimumSize: const Size(0, 36),),
                         child: _isLoadingLocation 
                             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                             : const Text('인증하기', style: TextStyle(color: Colors.white)),

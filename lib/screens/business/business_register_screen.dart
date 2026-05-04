@@ -305,13 +305,16 @@ class _BusinessRegisterScreenState extends State<BusinessRegisterScreen> {
                       Icon(_isLocationVerified ? Icons.check_circle : Icons.location_on, color: _isLocationVerified ? Colors.green : Colors.grey),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(_isLocationVerified ? '현장 위치 인증 완료' : '현재 위치가 업소와 일치하는지 인증해주세요.',
+                        child: Text(_isLocationVerified ? '현장 위치 인증 완료' : '현재 위치가 업소와 일치하는지 \n인증해주세요.',
                              style: TextStyle(fontWeight: FontWeight.bold, color: _isLocationVerified ? Colors.black : Colors.grey[700])),
                       ),
                       if (!_isLocationVerified)
                         ElevatedButton(
                           onPressed: _isLoadingLocation ? null : _verifyCurrentLocation,
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color.fromARGB(255, 101, 142, 213),
+                            padding: const EdgeInsets.symmetric(horizontal: 7), // 👈 버튼 좌우 여백을 줄여 크기 축소
+                            minimumSize: const Size(0, 36),),
                           child: _isLoadingLocation 
                               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                               : const Text('인증하기', style: TextStyle(color: Colors.white)),

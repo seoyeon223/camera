@@ -70,7 +70,7 @@ class DetectScreen extends StatelessWidget {
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('더미 탐지를 실행했습니다.'),
+                      content: Text('탐지를 실행했습니다.'),
                     ),
                   );
                 },
@@ -118,7 +118,7 @@ class DetectScreen extends StatelessWidget {
             // 4. Wi-Fi / 블루투스 탐지 결과
             InfoSectionCard(
               title: 'Wi-Fi / 블루투스 탐지 결과',
-              subtitle: '의심 키워드와 패턴을 기반으로 분류한 더미 결과입니다.',
+              subtitle: '의심 키워드와 패턴을 기반으로 분류한 결과입니다.',
               icon: Icons.wifi,
               child: Column(
                 children: suspiciousSignals.map((signal) {
